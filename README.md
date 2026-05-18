@@ -1,124 +1,70 @@
-# 🌱 Monitoreo Satelital
+# 🌱 AgroIA - VigorDAE
 
-Sistema de monitoreo de cultivos de maní mediante imágenes satelitales Sentinel-2 y análisis geoespacial - Córdoba, Argentina.
+**VigorDAE** es un sistema inteligente de monitoreo de cultivos (especializado en maní en Córdoba, Argentina) que garantiza la **integridad ecofisiológica** de los datos satelitales mediante el uso de Denoising Autoencoders (LSTM).
 
-## 📋 Descripción
+Este proyecto transforma series temporales ruidosas (Sentinel-2) en datos de vigor (NDVI, EVI) limpios y confiables, exponiéndolos a través de una arquitectura moderna lista para la nube (DaaS/SaaS).
 
-Este proyecto permite:
-- Procesar imágenes satelitales multitemporales
-- Clasificar estados de cultivo (suelo, desarrollo, maduro, vegetación densa)
-- Calcular áreas cultivadas
-- Generar series temporales de índices de vegetación (NDVI, NDRE, NDWI, EVI)
-- Visualizar resultados en una web interactiva
+## 🚀 Arquitectura del Sistema
 
-## 🗂️ Estructura
+El proyecto sigue una arquitectura modular de tres capas:
 
-```
-MANI_CORDOBA/
-├── config_mani.py          # Configuración global del proyecto
-├── utils_agro.py          # Utilidades comunes
-├── requirements-web.txt   # Dependencias para la app web
-├── datos/                 # Datos (satellite, clima, etc.)
-│   ├── raw/              # Imágenes satelitales TIFF
-│   ├── processed/       # DataCube NetCDF
-│   └── externos/        # Datos externos (CSV)
-├── scripts/              # Pipeline de procesamiento
-│   ├── 1_cargar_datacube_optimizado.py
-│   ├── 2_analisis_temporal_mejorado.py
-│   ├── 3_clasificar_fecha_global.py
-│   ├── 4_calcular_area_mejorado.py
-│   ├── 5_timelapse.py
-│   ├── 6_integracion_clima_agro.py
-│   ├── 7_generar_informe_pdf_mejorado.py
-│   └── 8_validacion_avanzada.py
-├── web/                   # App web Streamlit
-│   ├── app.py
-│   └── pages/
-│       ├── home.py
-│       ├── upload.py
-│       ├── results.py
-│       ├── analytics.py
-│       └── report.py
-└── notebooks/             # Análisis exploratorio
-    └── analisis_mani.ipynb
+1. **Core Pipeline (`src/`):** Motor de ingesta, auditoría con IA (DAE) y zonificación (K-Means).
+2. **DaaS API (`src/api/`):** Servicio FastAPI que expone los datos auditados por zona de manejo.
+3. **SaaS Web App (`web/`):** Interfaz interactiva en Streamlit.
+
+## 🗂️ Estructura de Directorios
+
+```text
+AgroIA-VigorDAE/
+├── src/
+│   ├── api/                # FastAPI Endpoints (DaaS)
+│   ├── config/             # Configuración centralizada
+│   ├── data/               # Ingestor de TIFF a DataCube NetCDF
+│   ├── models/             # Agente Verificador DAE y Clustering
+│   ├── analysis/           # Fenología y Tendencias
+│   └── pipeline.py         # Orquestador del motor
+├── web/                    # Aplicación Streamlit (SaaS)
+├── datos/                  # [NO TRACKEADO] Datos raw (TIFF) y processed (NetCDF)
+├── resultados/             # [NO TRACKEADO] Logs, reportes y gráficos
+├── AGENT.md                # Cerebro del Proyecto (Lógica y Arquitectura)
+├── Dockerfile              # Configuración de contenedor
+└── requirements.txt        # Dependencias de Python
 ```
 
-## 🚀 Instalación
+## ⚙️ Instalación y Uso Local
 
-### 1. Clonar el repositorio
+### 1. Preparar Entorno
 ```bash
-git clone https://github.com/sdarionicolas-boop/MANI_CORDOBA.git
-cd MANI_CORDOBA
+git clone https://github.com/sdarionicolas-boop/AgroIA-VigorDAE.git
+cd AgroIA-VigorDAE
+pip install -r requirements.txt
+cp .env.example .env
 ```
+*(Asegúrate de colocar tus imágenes Sentinel-2 `MANI_YYYYMMDD.tif` en la carpeta `datos/raw/`)*
 
-### 2. Instalar dependencias
+### 2. Ejecutar el Motor de Datos (Pipeline)
+Este comando ingesta los TIFFs, entrena el Agente DAE, limpia anomalías y genera el DataCube auditado.
 ```bash
-pip install -r requirements-web.txt
+python -m src.pipeline
 ```
 
-Dependencias principales:
-- streamlit >= 1.28.0
-- xarray, rioxarray, rasterio
-- pandas, numpy, matplotlib
-- geopandas, folium, plotly
+### 3. Levantar la API de Datos (DaaS)
+```bash
+uvicorn src.api.main:app --reload
+```
+*Documentación Swagger disponible en: `http://localhost:8000/docs`*
 
-## 💻 Uso
-
-### Ejecutar la app web
+### 4. Levantar la Web App (SaaS)
 ```bash
 streamlit run web/app.py
 ```
-Luego acceder a: **http://localhost:8501**
+*Interfaz disponible en: `http://localhost:8501`*
 
-### Ejecutar pipeline de procesamiento
-```bash
-cd MANI_CORDOBA
-python scripts/1_cargar_datacube_optimizado.py
-python scripts/2_analisis_temporal_mejorado.py
-python scripts/3_clasificar_fecha_global.py
-python scripts/4_calcular_area_mejorado.py
-# ... continuar con los demás scripts
-```
-
-## 📊 Datos de Entrada
-
-### Imágenes satelitales
-- Formato: GeoTIFF (.tif)
-- Bandas: B2, B3, B4, B5, B8 (Sentinel-2)
-- Nombre: `MANI_YYYYMMDD.tif` (ej: MANI_20230708.tif)
-- CRS: EPSG:32720 (UTM zona 20S)
-
-### Datos tabulares
-- CSV o Excel con datos de cultivos/clima
-
-## 📈 Índices Calculados
-
-| Índice | Fórmula | Aplicación |
-|--------|---------|------------|
-| NDVI | (NIR - Red) / (NIR + Red) | Vegetación |
-| NDRE | (NIR - RedEdge) / (NIR + RedEdge) | Estrés vegetal |
-| NDWI | (Green - NIR) / (Green + NIR) | Humedad |
-| EVI | 2.5*(NIR-Red)/(NIR+6*Red-7.5*Blue+1) | Densidad vegetal |
-
-## 🔧 Configuración
-
-Editar `config_mani.py` para ajustar:
-- Rutas de directorios
-- Sistema de coordenadas (CRS)
-- Bandas a utilizar
-- Parámetros de clasificación (k-means)
-- Umbrales de NDVI
-
-## 📝 Changelog
-
-### v1.0 (2025-05)
-- App web Streamlit funcional
-- Pipeline completo de 8 scripts
-- Soporte para datos de Maní Córdoba
-
-## 🤝 Contribuciones
-
-¡Las contribuciones son bienvenidas! Por favor, abrí un issue o enviá un pull request.
+## 🤖 El Agente Verificador (DAE)
+El corazón de AgroIA-VigorDAE es un Autoencoder LSTM que:
+1. Aprende la curva de crecimiento fenológico esperada.
+2. Detecta anomalías (sombras, nubes no enmascaradas) evaluando el error de reconstrucción.
+3. Reconstruye y corrige la serie temporal antes del análisis agronómico.
 
 ## 📄 Licencia
 
@@ -126,5 +72,5 @@ Este proyecto está bajo la Licencia **GNU AGPL v3** - Mira el archivo [LICENSE]
 
 ## 👤 Autor
 
-- **Dario Nicolas**
+- **AgroIA / Dario Nicolas**
 - GitHub: [@sdarionicolas-boop](https://github.com/sdarionicolas-boop)
