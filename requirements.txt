@@ -1,0 +1,17 @@
+
+numpy
+pandas
+xarray
+rioxarray
+rasterio
+netCDF4
+h5netcdf
+scipy
+torch
+scikit-learn
+python-dotenv
+matplotlib
+dask
+distributed
+fastapi
+uvicorn

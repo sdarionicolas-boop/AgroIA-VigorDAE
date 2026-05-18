@@ -1,59 +1,115 @@
-import streamlit as st
-import os
-import pandas as pd
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+import streamlit as st
+import requests
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+
+API_URL = "http://localhost:8000"
 
 def show():
-    st.title("📈 Análisis")
-    st.markdown("Análisis temporal y gráfico de la evolución del cultivo")
+    st.title("📈 Análisis de Vigor (SaaS)")
+    st.markdown("Visualización de datos auditados por el **Agente Verificador DAE**")
     
-    st.subheader("📉 Series de Tiempo NDVI")
-    
-    stats_dir = os.path.join(BASE_DIR, "resultados", "estadisticas")
-    
-    if os.path.exists(stats_dir):
-        csv_files = [f for f in os.listdir(stats_dir) if f.endswith('.csv')]
-        
-        if csv_files:
-            selected = st.selectbox("Seleccionar serie", csv_files)
-            df = pd.read_csv(os.path.join(stats_dir, selected))
-            
-            numeric_cols = df.select_dtypes(include=['float', 'int']).columns.tolist()
-            
-            if numeric_cols:
-                col = st.selectbox("Seleccionar variable", numeric_cols)
-                
-                if 'fecha' in df.columns or 'date' in df.columns or 'time' in df.columns:
-                    date_col = [c for c in df.columns if 'fecha' in c.lower() or 'date' in c.lower() or 'time' in c.lower()][0]
-                    df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
-                    df = df.sort_values(date_col)
-                    st.line_chart(df.set_index(date_col)[col])
-                else:
-                    st.line_chart(df[col])
+    # 1. Verificar conexión con la API
+    try:
+        health = requests.get(f"{API_URL}/health").json()
+        if health["status"] != "online":
+            st.error("⚠️ La API está fuera de línea.")
+            return
+    except:
+        st.error("⚠️ No se pudo conectar con la API en http://localhost:8000. Asegúrese de que el servicio esté corriendo.")
+        return
+
+    st.success("✅ Conectado a la API de Datos (DaaS)")
+
+    # 2. Consultar Datos Auditados
+    with st.spinner("Obteniendo datos de la API..."):
+        try:
+            response = requests.get(f"{API_URL}/lotes/default/ndvi_auditado")
+            if response.status_code == 200:
+                data = response.json()
+                df = pd.DataFrame(data)
+                df['time'] = pd.to_datetime(df['time'])
+                df = df.sort_values('time')
             else:
-                st.warning("No hay columnas numéricas para graficar")
-        else:
-            st.info("No hay datos disponibles")
-    else:
-        st.warning("No se encontró directorio de estadísticas")
+                st.error(f"Error al obtener datos: {response.text}")
+                return
+        except Exception as e:
+            st.error(f"Fallo en la petición: {e}")
+            return
+
+    # 3. Sidebar con filtros y métricas rápidas
+    st.sidebar.subheader("⚙️ Configuración de Vista")
+    show_raw = st.sidebar.checkbox("Mostrar NDVI Satelital (Raw)", value=True)
+    show_audit = st.sidebar.checkbox("Mostrar NDVI Auditado (DAE)", value=True)
     
-    st.markdown("---")
+    # Métricas
+    total_points = len(df)
+    anomalies = df[df['es_anomalia'] == True]
+    pct_clean = (1 - len(anomalies)/total_points) * 100
     
-    st.subheader("🛰️ Análisis de Imágenes")
+    st.sidebar.metric("Salud del Dataset", f"{pct_clean:.1f}%")
+    st.sidebar.metric("Anomalías Detectadas", len(anomalies))
+
+    # 4. Gráfico Interactivo con Plotly
+    st.subheader("📉 Evolución del Vigor (NDVI)")
     
-    timelapse_dir = os.path.join(BASE_DIR, "resultados", "timelapse")
-    if os.path.exists(timelapse_dir):
-        images = [f for f in os.listdir(timelapse_dir) if f.endswith(('.png', '.jpg'))]
-        
-        if images:
-            st.success(f"✅ {len(images)} imágenes disponibles")
-            
-            selected_img = st.selectbox("Seleccionar imagen", images)
-            
-            img_path = os.path.join(timelapse_dir, selected_img)
-            st.image(img_path, caption=selected_img, use_container_width=True)
-        else:
-            st.info("No hay imágenes de timelapse")
-    else:
-        st.info("No hay timelapse disponible")
+    fig = go.Figure()
+
+    if show_raw:
+        fig.add_trace(go.Scatter(
+            x=df['time'], y=df['NDVI'],
+            mode='lines+markers',
+            name='NDVI Satelital (Ruido)',
+            line=dict(color='gray', dash='dash', width=1),
+            marker=dict(size=4),
+            opacity=0.5
+        ))
+
+    if show_audit:
+        fig.add_trace(go.Scatter(
+            x=df['time'], y=df['NDVI_auditado'],
+            mode='lines',
+            name='NDVI Auditado (Agente DAE)',
+            line=dict(color='#2ecc71', width=3),
+        ))
+
+    # Resaltar anomalías
+    if len(anomalies) > 0:
+        fig.add_trace(go.Scatter(
+            x=anomalies['time'], y=anomalies['NDVI'],
+            mode='markers',
+            name='Anomalía Detectada',
+            marker=dict(color='#e74c3c', size=10, symbol='x-thin', line=dict(width=2))
+        ))
+
+    fig.update_layout(
+        template="plotly_white",
+        hovermode="x unified",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        margin=dict(l=0, r=0, t=30, b=0)
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
+
+    # 5. Información Fenológica (desde API)
+    st.subheader("🌾 Fenología y Estado del Cultivo")
+    try:
+        pheno_data = requests.get(f"{API_URL}/lotes/default/fenologia").json()
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.info(f"📅 **Siembra**\n\n{pheno_data['hitos']['siembra_estimada']}")
+        with col2:
+            st.success(f"🔝 **Pico Vigor**\n\n{pheno_data['hitos']['pico_vegetativo']}")
+        with col3:
+            st.warning(f"🚜 **Cosecha**\n\n{pheno_data['hitos']['cosecha_estimada']}")
+    except:
+        st.write("No se pudo obtener información fenológica.")
+
+    # 6. Tabla de Auditoría
+    with st.expander("🔍 Ver Tabla de Auditoría Detallada"):
+        st.dataframe(df, use_container_width=True)
+
+if __name__ == "__main__":
+    show()
