@@ -122,7 +122,7 @@ Editar `config_mani.py` para ajustar:
 
 ## 📄 Licencia
 
-MIT License
+Este proyecto está bajo la Licencia **GNU AGPL v3** - Mira el archivo [LICENSE](LICENSE) para más detalles. Esta licencia protege el software especialmente cuando se ofrece como servicio (SaaS/DaaS), obligando a compartir las mejoras realizadas.
 
 ## 👤 Autor
 
