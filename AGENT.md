@@ -1,4 +1,4 @@
-# 🧠 AGENT.MD: Cerebro del Proyecto VigorDAE AI
+# 🧠 AGENT.MD: Cerebro del Proyecto AgroIA - VigorDAE
 
 ## 🚀 Misión del Proyecto
 Transformar datos satelitales Sentinel-2 y climáticos en información accionable para el cultivo de maní en Córdoba, Argentina, garantizando la **integridad ecofisiológica** de los datos mediante Inteligencia Artificial (Agente DAE).
@@ -20,7 +20,7 @@ El proyecto sigue una arquitectura desacoplada de tres capas:
 
 ### Estructura de Carpetas
 ```text
-VigorDAE AI/
+AgroIA - VigorDAE/
 ├── src/
 │   ├── api/                # FastAPI Endpoints (DaaS)
 │   ├── config/             # Configuración centralizada (.env, settings.py, logging)

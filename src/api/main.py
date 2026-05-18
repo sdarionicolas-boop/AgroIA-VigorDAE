@@ -11,7 +11,7 @@ import logging
 logger = logging.getLogger("API_Mani")
 
 app = FastAPI(
-    title="VigorDAE AI - DaaS API",
+    title="AgroIA - VigorDAE DaaS API",
     description="Servicio de auditoría inteligente y consulta de vigor para cultivos de maní.",
     version="1.0.0"
 )
