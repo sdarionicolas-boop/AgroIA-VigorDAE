@@ -196,53 +196,40 @@ def show():
     # ══════════════════════════════════════════════════════════════════════════════
     # TAB 3 — MAPA DE ZONIFICACIÓN
     # ══════════════════════════════════════════════════════════════════════════════
-    with tab_mapa:
-        data_mapa = fetch("mapa")
+        with tab_mapa:
+            with st.spinner("Cargando metadata y render de mapa..."):
+                meta = fetch("mapa/meta")
+                # La imagen se carga por URL directa para que el navegador la cachee y no pase por JSON
+                mapa_url = f"{API_URL_ENV}/lotes/default/mapa/render"
 
-        if not data_mapa:
-            st.warning("Mapa no disponible.")
-        else:
-            dims = data_mapa["dimensions"]
-            matrix = np.array(data_mapa["matrix"])
+            if not meta:
+                st.warning("Información de mapa no disponible.")
+            else:
+                dims = meta["dimensions"]
+                col_info, col_mapa = st.columns([1, 3])
 
-            col_info, col_mapa = st.columns([1, 3])
+                with col_info:
+                    st.subheader("Información del Lote")
+                    st.write(f"**Sistema:** `{meta['crs']}`")
+                    st.write(f"**Resolución:** {dims['y']} × {dims['x']} píxeles")
+                    if meta.get("bbox"):
+                        st.write(f"**Límites (BBox):**")
+                        st.code(f"{[round(v, 2) for v in meta['bbox']]}")
 
-            with col_info:
-                st.subheader("Información del lote")
-                st.write(f"**CRS:** `{data_mapa['crs']}`")
-                st.write(f"**Dimensiones:** {dims['y']} × {dims['x']} píxeles")
-                if data_mapa.get("bbox"):
-                    bb = data_mapa["bbox"]
-                    st.write(f"**Límites (BBox):**")
-                    st.code(f"{[round(v, 2) for v in bb]}")
+                    st.divider()
+                    st.markdown("**Leyenda Operativa**")
+                    st.write("🟢 **Zona Alto Vigor**")
+                    st.write("🟡 **Zona Vigor Medio**")
+                    st.write("🟠 **Zona Bajo Vigor**")
+                    st.write("⬜ **Fuera de Lote / Ruido**")
 
-                st.divider()
-                st.markdown("**Leyenda**")
-                st.write("🟢 **Zona Alto Vigor**")
-                st.write("🟡 **Zona Vigor Medio**")
-                st.write("🟠 **Zona Bajo Vigor**")
-                st.write("⬜ **Sin dato**")
+                with col_mapa:
+                    # Usamos st.image directamente con la URL de la API. 
+                    # El parámetro use_container_width=True asegura que se vea bien.
+                    st.image(mapa_url, caption="Mapa de Zonificación de Precisión (Renderizado en Servidor)", use_container_width=True)
 
-            with col_mapa:
-                # Convertir matrix a imagen RGB
-                h, w = matrix.shape
-                rgb = np.zeros((h, w, 3), dtype=np.uint8)
-                for val, color in ZONA_COLORES_MAPA.items():
-                    rgb[matrix == val] = color
-
-                fig_mapa = go.Figure(go.Image(z=rgb))
-                fig_mapa.update_layout(
-                    title="Mapa de Zonificación Operativa (Precisión)",
-                    xaxis=dict(showticklabels=False, showgrid=False),
-                    yaxis=dict(showticklabels=False, showgrid=False, scaleanchor="x"),
-                    margin=dict(l=0, r=0, t=40, b=0),
-                    height=550,
-                )
-                st.plotly_chart(fig_mapa, use_container_width=True)
-
-                st.caption(
-                    "Este mapa identifica sub-regiones estables del lote basadas en el comportamiento histórico limpio."
-                )
-
+                    st.caption(
+                        "Este mapa es servido como PNG optimizado con paleta indexada desde el motor de AgroIA."
+                    )
 if __name__ == "__main__":
     show()
