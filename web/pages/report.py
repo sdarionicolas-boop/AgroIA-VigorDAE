@@ -102,7 +102,7 @@ def show(lote_id: str = "default"):
             df = pd.DataFrame(res)
             zonas = _fetch_zonas(lote_id)
             mapa = _fetch_mapa(lote_id)
-            feno = _calcular_feno(df)
+            feno = _calcular_fenologia(df)
 
             # Recargar el modulo para evitar caches de Streamlit
             import importlib
