@@ -58,7 +58,7 @@ def main():
     )
 
     st.sidebar.markdown("---")
-    st.sidebar.caption("v2.1.0 | Powered by DAE AI")
+    st.sidebar.caption("v2.2.0 | Powered by DAE AI")
 
     # ── Páginas ────────────────────────────────────────────────────────────────
     if menu == "🏠 Inicio":
@@ -92,14 +92,11 @@ def main():
             analytics.show(lote_id=lote_id)
 
     elif menu == "📋 Informe":
-        st.header("📋 Generación de Informes")
-        if lote_id:
-            st.info(
-                f"Lote seleccionado: **{lote_id}**. "
-                "Módulo de reportes PDF en desarrollo — disponible en la próxima versión."
-            )
+        if lote_id is None:
+            st.warning("Seleccioná un lote para generar el informe.")
         else:
-            st.info("Módulo de reportes PDF en desarrollo.")
+            from web.pages import report
+            report.show(lote_id=lote_id)
 
 
 if __name__ == "__main__":
