@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  # MOTOR DE DATOS Y API (Backend)
+
   backend:
     build:
       context: .
@@ -17,8 +17,15 @@ services:
     env_file:
       - .env
     restart: always
+    healthcheck:
+      # Llama a /health y espera HTTP 200 antes de marcar el servicio como "healthy"
+      # El lifespan de FastAPI puede tardar ~10s cargando el DataCube en memoria
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s      # chequea cada 10 segundos
+      timeout: 5s        # falla si no responde en 5s
+      retries: 6         # hasta 60s de espera total antes de marcar unhealthy
+      start_period: 15s  # no penaliza fallos durante los primeros 15s de arranque
 
-  # INTERFAZ WEB (SaaS Frontend)
   frontend:
     build:
       context: .
@@ -29,7 +36,8 @@ services:
     ports:
       - "8501:8501"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy   # espera el healthcheck, no solo el arranque
     environment:
       - API_URL=http://backend:8000
     restart: always

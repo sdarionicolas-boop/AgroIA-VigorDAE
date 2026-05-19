@@ -1,37 +1,35 @@
-# Dockerfile para AgroIA - VigorDAE (Microservices Base)
 FROM python:3.11-slim
 
-# Evitar prompts de debian
-ENV DEBIAN_FRONTEND=noninteractive
+ENV DEBIAN_FRONTEND=noninteractive \
+    CPLUS_INCLUDE_PATH=/usr/include/gdal \
+    C_INCLUDE_PATH=/usr/include/gdal \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
 
-# Instalar dependencias de sistema (GDAL y compilación)
-RUN apt-get update && apt-get install -y \
+# Dependencias de sistema — capa que cambia poco, va primero
+RUN apt-get update && apt-get install -y --no-install-recommends \
     binutils \
     libproj-dev \
     gdal-bin \
     libgdal-dev \
     python3-gdal \
     build-essential \
+    curl \
     && rm -rf /var/lib/apt/lists/*
-
-# Configurar variables de entorno para GDAL
-ENV CPLUS_INCLUDE_PATH=/usr/include/gdal
-ENV C_INCLUDE_PATH=/usr/include/gdal
 
 WORKDIR /app
 
-# Instalar dependencias de Python
+# requirements primero — se cachea si no cambia el archivo
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copiar el código fuente y cerebro
+# Código fuente — capa que cambia más seguido, va al final
 COPY src/ ./src/
 COPY web/ ./web/
 COPY AGENT.md .
 COPY .env.example .env
 
-# Crear estructuras de carpetas para montajes
+# Carpetas para volúmenes montados
 RUN mkdir -p datos/raw datos/processed resultados/logs
 
-# La ejecución se define en docker-compose.yml
-CMD ["python", "-m", "src.pipeline"]
+# Sin CMD — lo define docker-compose por servicio
