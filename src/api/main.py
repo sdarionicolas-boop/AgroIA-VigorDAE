@@ -17,10 +17,10 @@ logger = logging.getLogger("API_VigorDAE")
 _lote_cache: dict[str, dict] = {}
 
 _PALETA = [
-    128, 128, 128, 255,
-    224, 123,  84, 255,
-    242, 201,  76, 255,
-     39, 174,  96, 255,
+    128, 128, 128,  # Index 0: Gris (Sin dato)
+    224, 123,  84,  # Index 1: Naranja (Bajo)
+    242, 201,  76,  # Index 2: Amarillo (Medio)
+     39, 174,  96,  # Index 3: Verde (Alto)
 ]
 _FULL_PALETTE = _PALETA + [0] * (768 - len(_PALETA))
 
@@ -176,13 +176,18 @@ async def get_mapa_meta(lote_id: str):
 
 @app.get("/lotes/{lote_id}/mapa/render")
 async def get_mapa_render(lote_id: str):
-    """PNG con paleta indexada del mapa de zonificación."""
+    """PNG en modo RGB del mapa de zonificación para máxima compatibilidad."""
     mapa = _get_lote(lote_id)["mapa"]
     if mapa is None:
         raise HTTPException(status_code=404, detail="Mapa de zonas no disponible.")
 
+    # Crear imagen indexada y aplicar paleta
     img = Image.fromarray((mapa + 1).astype(np.uint8), mode="P")
     img.putpalette(_FULL_PALETTE)
+    
+    # FORZAR CONVERSION A RGB para evitar problemas de interpretación de paleta en clientes
+    img_rgb = img.convert("RGB")
+    
     buf = io.BytesIO()
-    img.save(buf, format="PNG")
+    img_rgb.save(buf, format="PNG")
     return Response(content=buf.getvalue(), media_type="image/png")

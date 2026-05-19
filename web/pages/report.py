@@ -71,7 +71,7 @@ def _calcular_feno(df: pd.DataFrame):
             "pico": dates[peak_idx], 
             "fin": dates[end_idx]
         }
-        res["duracion_dias"] = (pd.to_datetime(res["fin"]) - pd.to_datetime(res["inicio"])).days
+        res["duracion_dias"] = (pd.Timestamp(res["fin"]) - pd.Timestamp(res["inicio"])).days
         
         # Validación agronómica básica
         if res["duracion_dias"] > 210: # Si dura más de 7 meses, algo está mal filtrado
