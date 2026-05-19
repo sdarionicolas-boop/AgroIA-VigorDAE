@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  # MOTOR DE DATOS Y API (Backend)
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: agroia-backend:latest
+    container_name: agroia-api
+    command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./datos:/app/datos
+      - ./resultados:/app/resultados
+    env_file:
+      - .env
+    restart: always
+
+  # INTERFAZ WEB (SaaS Frontend)
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: agroia-frontend:latest
+    container_name: agroia-web
+    command: streamlit run web/app.py --server.port 8501 --server.address 0.0.0.0
+    ports:
+      - "8501:8501"
+    depends_on:
+      - backend
+    environment:
+      - API_URL=http://backend:8000
+    restart: always

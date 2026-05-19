@@ -1,4 +1,4 @@
-# Dockerfile para AgroIA - VigorDAE (Full Stack)
+# Dockerfile para AgroIA - VigorDAE (Microservices Base)
 FROM python:3.11-slim
 
 # Evitar prompts de debian
@@ -24,21 +24,14 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copiar el código fuente
+# Copiar el código fuente y cerebro
 COPY src/ ./src/
 COPY web/ ./web/
 COPY AGENT.md .
-# Nota: datos/ y resultados/ se manejan mediante volúmenes en producción
+COPY .env.example .env
+
+# Crear estructuras de carpetas para montajes
 RUN mkdir -p datos/raw datos/processed resultados/logs
 
-# Exponer puertos: API (8000) y SaaS (8501)
-EXPOSE 8000
-EXPOSE 8501
-
-# Script de arranque dual (API + Web)
-RUN echo '#!/bin/bash \n\
-uvicorn src.api.main:app --host 0.0.0.0 --port 8000 & \n\
-streamlit run web/app.py --server.port 8501 --server.address 0.0.0.0 \n\
-' > start.sh && chmod +x start.sh
-
-CMD ["./start.sh"]
+# La ejecución se define en docker-compose.yml
+CMD ["python", "-m", "src.pipeline"]
