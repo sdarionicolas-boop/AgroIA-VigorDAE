@@ -168,7 +168,7 @@ def generate_report(
         pdf.section_title("Mapa de Zonificación Espacial")
         pdf.set_font("Helvetica", "", 9)
         pdf.set_text_color(*COLOR_GRIS)
-        pdf.cell(0, 5, "Naranja = Bajo vigor  ·  Amarillo = Medio  ·  Verde = Alto  ·  Gris = Sin dato", ln=True, align="C")
+        pdf.cell(0, 5, "Naranja: Bajo vigor  |  Amarillo: Medio  |  Verde: Alto  |  Gris: Sin dato", ln=True, align="C")
         pdf.ln(2)
         _embed_image(pdf, mapa_png_bytes, w=120, center=True)
         pdf.ln(4)
@@ -267,6 +267,10 @@ def _plot_zonas(zonas_data: list[dict]) -> bytes | None:
 def _embed_image(pdf: FPDF, img_bytes: bytes, w: float = 160, center: bool = False) -> None:
     try:
         buf = io.BytesIO(img_bytes)
+        x = (pdf.w - w) / 2 if center else pdf.get_x()
+        pdf.image(buf, x=x, w=w)
+    except: pass
+g_bytes)
         x = (pdf.w - w) / 2 if center else pdf.get_x()
         pdf.image(buf, x=x, w=w)
     except: pass
