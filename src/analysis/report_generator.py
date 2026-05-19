@@ -11,7 +11,9 @@ from PIL import Image
 
 logger = logging.getLogger(__name__)
 
-# ── Paleta VigorDAE ────────────────────────────────────────────────────────────
+# ###############################################################################
+# Paleta VigorDAE (STRICT ASCII)
+# ###############################################################################
 COLOR_VERDE  = (39, 174, 96)
 COLOR_NARANJA = (224, 123, 84)
 COLOR_AMARILLO = (242, 201, 76)
@@ -25,7 +27,7 @@ class VigorDAEReport(FPDF):
 
     def __init__(self, lote_id: str):
         super().__init__(orientation="P", unit="mm", format="A4")
-        self.lote_id = lote_id
+        self.lote_id = str(lote_id).encode('ascii', 'ignore').decode('ascii')
         self.set_auto_page_break(auto=True, margin=20)
         self.set_margins(left=20, top=15, right=20)
 
@@ -33,21 +35,27 @@ class VigorDAEReport(FPDF):
         # Barra verde superior
         self.set_fill_color(*COLOR_VERDE)
         self.rect(0, 0, 210, 12, "F")
-        # Título en blanco
+        # Titulo en blanco
         self.set_font("Helvetica", "B", 11)
         self.set_text_color(255, 255, 255)
         self.set_xy(10, 2)
-        self.cell(0, 8, "AgroIA · VigorDAE  —  Sistema de Monitoreo Satelital Inteligente", ln=False)
+        # STRICT ASCII ONLY
+        self.cell(0, 8, "AgroIA | VigorDAE - Sistema de Monitoreo Satelital Inteligente", ln=False)
         self.ln(14)
 
     def footer(self):
         self.set_y(-12)
         self.set_font("Helvetica", "", 8)
         self.set_text_color(*COLOR_GRIS)
-        self.cell(0, 5, f"Lote: {self.lote_id}  |  Página {self.page_no()}  |  Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}", align="C")
+        # STRICT ASCII ONLY
+        footer_text = f"Lote: {self.lote_id} | Pagina {self.page_no()} | Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+        self.cell(0, 5, footer_text, align="C")
 
-    # ── Helpers de estilo ──────────────────────────────────────────────────────
+    # ###########################################################################
+    # Helpers de estilo
+    # ###########################################################################
     def section_title(self, title: str) -> None:
+        title = str(title).encode('ascii', 'ignore').decode('ascii')
         self.ln(4)
         self.set_fill_color(*COLOR_FONDO)
         self.set_draw_color(*COLOR_VERDE)
@@ -63,11 +71,13 @@ class VigorDAEReport(FPDF):
         self.set_font("Helvetica", "", 9)
         self.set_text_color(*COLOR_GRIS)
         for label, _ in items:
+            label = str(label).encode('ascii', 'ignore').decode('ascii')
             self.cell(col_w, 5, label, align="C")
         self.ln(5)
         self.set_font("Helvetica", "B", 14)
         self.set_text_color(*COLOR_NEGRO)
         for _, valor in items:
+            valor = str(valor).encode('ascii', 'ignore').decode('ascii')
             self.cell(col_w, 8, valor, align="C")
         self.ln(10)
 
@@ -77,17 +87,21 @@ class VigorDAEReport(FPDF):
         col_valor = self.w - 40 - col_label
         self.set_font("Helvetica", "", 10)
         for label, valor in rows:
+            label = str(label).encode('ascii', 'ignore').decode('ascii')
+            valor = str(valor).encode('ascii', 'ignore').decode('ascii')
             self.set_fill_color(250, 250, 250)
             self.set_text_color(*COLOR_GRIS)
             self.cell(col_label, 7, label, border="B", fill=True)
             self.set_text_color(*COLOR_NEGRO)
             self.set_font("Helvetica", "B", 10)
-            self.cell(col_valor, 7, str(valor) if valor else "—", border="B", ln=True)
+            self.cell(col_valor, 7, valor if valor else "-", border="B", ln=True)
             self.set_font("Helvetica", "", 10)
         self.ln(4)
 
 
-# ── Función principal ──────────────────────────────────────────────────────────
+# ###############################################################################
+# Funcion principal
+# ###############################################################################
 
 def generate_report(
     lote_id: str,
@@ -95,8 +109,8 @@ def generate_report(
     zonas_data: list[dict],
     fenologia: dict | None,
     mapa_png_bytes: bytes | None,
-    titulo: str = "Informe de Campaña",
-    region: str = "Córdoba, Argentina",
+    titulo: str = "Informe de Campana",
+    region: str = "Cordoba, Argentina",
 ) -> bytes:
     """
     Genera el PDF completo y retorna los bytes para descarga.
@@ -104,17 +118,26 @@ def generate_report(
     pdf = VigorDAEReport(lote_id=lote_id)
     pdf.add_page()
 
-    # ── 1. Portada / Cabecera ──────────────────────────────────────────────────
+    # ###########################################################################
+    # 1. Portada / Cabecera
+    # ###########################################################################
+    # Sanitizado forzado a ASCII
+    titulo_clean = str(titulo).encode('ascii', 'ignore').decode('ascii')
+    region_clean = str(region).encode('ascii', 'ignore').decode('ascii')
+    lote_clean = str(lote_id).encode('ascii', 'ignore').decode('ascii')
+
     pdf.set_font("Helvetica", "B", 18)
     pdf.set_text_color(*COLOR_NEGRO)
-    pdf.cell(0, 10, titulo, ln=True, align="C")
+    pdf.cell(0, 10, titulo_clean, ln=True, align="C")
     pdf.set_font("Helvetica", "", 11)
     pdf.set_text_color(*COLOR_GRIS)
-    pdf.cell(0, 6, f"Lote: {lote_id}  ·  {region}", ln=True, align="C")
-    pdf.cell(0, 6, f"Fecha de generación: {datetime.now().strftime('%d de %B de %Y')}", ln=True, align="C")
+    pdf.cell(0, 6, f"Lote: {lote_clean} - {region_clean}", ln=True, align="C")
+    pdf.cell(0, 6, f"Fecha de generacion: {datetime.now().strftime('%d/%m/%Y')}", ln=True, align="C")
     pdf.ln(6)
 
-    # ── 2. KPIs globales ───────────────────────────────────────────────────────
+    # ###########################################################################
+    # 2. KPIs globales
+    # ###########################################################################
     pdf.section_title("Resumen del Lote")
 
     ndvi_max  = round(float(df_resumen["ndvi_auditado"].max()), 3)
@@ -124,21 +147,25 @@ def generate_report(
     n_fechas  = len(df_resumen)
 
     pdf.kpi_row([
-        ("NDVI Máximo", str(ndvi_max)),
+        ("NDVI Maximo", str(ndvi_max)),
         ("NDVI Promedio", str(ndvi_prom)),
-        ("Imágenes procesadas", str(n_fechas)),
-        ("Anomalías corregidas", f"{n_anom} ({pct_anom}%)"),
+        ("Imagenes procesadas", str(n_fechas)),
+        ("Anomalias corregidas", f"{n_anom} ({pct_anom}%)"),
     ])
 
-    # ── 3. Gráfico NDVI global ─────────────────────────────────────────────────
-    pdf.section_title("Serie Temporal NDVI — Crudo vs Auditado")
+    # ###########################################################################
+    # 3. Grafico NDVI global
+    # ###########################################################################
+    pdf.section_title("Serie Temporal NDVI - Crudo vs Auditado")
     chart_png = _plot_ndvi_series(df_resumen)
     if chart_png:
         _embed_image(pdf, chart_png, w=170)
     pdf.ln(4)
 
-    # ── 4. Zonificación ────────────────────────────────────────────────────────
-    pdf.section_title("Zonificación de Manejo")
+    # ###########################################################################
+    # 4. Zonificacion
+    # ###########################################################################
+    pdf.section_title("Zonificacion de Manejo")
 
     if zonas_data:
         zona_colores = {
@@ -149,12 +176,12 @@ def generate_report(
         col_w = (pdf.w - 40) / 3
         pdf.set_font("Helvetica", "B", 10)
         for zona in zonas_data:
-            nombre = zona.get("nombre", f"Zona {zona['zona']}")
+            nombre = str(zona.get("nombre", f"Zona {zona['zona']}")).encode('ascii', 'ignore').decode('ascii')
             pct    = zona.get("pct_pixeles") or 0
             color  = zona_colores.get(nombre, COLOR_GRIS)
             pdf.set_fill_color(*color)
             pdf.set_text_color(255, 255, 255)
-            pdf.cell(col_w, 10, f"{nombre}  {pct}%", align="C", fill=True, border=1)
+            pdf.cell(col_w, 10, f"{nombre} {pct}%", align="C", fill=True, border=1)
         pdf.ln(12)
 
         # Gráfico comparativo de zonas
@@ -163,40 +190,46 @@ def generate_report(
             _embed_image(pdf, chart_zonas, w=170)
         pdf.ln(4)
 
-    # ── 5. Mapa de zonificación ────────────────────────────────────────────────
+    # ###########################################################################
+    # 5. Mapa de zonificacion
+    # ###########################################################################
     if mapa_png_bytes:
-        pdf.section_title("Mapa de Zonificación Espacial")
+        pdf.section_title("Mapa de Zonificacion Espacial")
         pdf.set_font("Helvetica", "", 9)
         pdf.set_text_color(*COLOR_GRIS)
-        pdf.cell(0, 5, "Naranja: Bajo vigor  |  Amarillo: Medio  |  Verde: Alto  |  Gris: Sin dato", ln=True, align="C")
+        pdf.cell(0, 5, "Naranja: Bajo vigor | Amarillo: Medio | Verde: Alto | Gris: Sin dato", ln=True, align="C")
         pdf.ln(2)
         _embed_image(pdf, mapa_png_bytes, w=120, center=True)
         pdf.ln(4)
 
-    # ── 6. Fenología ───────────────────────────────────────────────────────────
-    pdf.section_title("Análisis Fenológico")
+    # ###########################################################################
+    # 6. Fenologia
+    # ###########################################################################
+    pdf.section_title("Analisis Fenologico")
     if fenologia:
         def _fmt_date(d):
-            if d is None: return "—"
+            if d is None: return "-"
             try: return pd.to_datetime(d).strftime("%d/%m/%Y")
             except: return str(d)
 
         pdf.info_table([
-            ("Inicio de campaña",  _fmt_date(fenologia.get("inicio"))),
+            ("Inicio de campana",  _fmt_date(fenologia.get("inicio"))),
             ("Pico de vigor",      _fmt_date(fenologia.get("pico"))),
             ("Fin estimado",       _fmt_date(fenologia.get("fin"))),
-            ("Duración (días)",    str(fenologia.get("duracion_dias", "—"))),
+            ("Duracion (dias)",    str(fenologia.get("duracion_dias", "-"))),
         ])
 
-    # ── 7. Notas finales ───────────────────────────────────────────────────────
+    # ###########################################################################
+    # 7. Notas finales
+    # ###########################################################################
     pdf.ln(6)
     pdf.set_font("Helvetica", "I", 8)
     pdf.set_text_color(*COLOR_GRIS)
     pdf.multi_cell(
         0, 5,
-        "Este informe fue generado automáticamente por AgroIA - VigorDAE. "
+        "Este informe fue generado automaticamente por AgroIA - VigorDAE. "
         "Los datos de NDVI han sido auditados por el Agente Verificador (LSTM Autoencoder) "
-        "para garantizar la integridad ecofisiológica. La zonificación fue realizada mediante K-Means.",
+        "para garantizar la integridad ecofisiologica. La zonificacion fue realizada mediante K-Means.",
         align="J"
     )
 
@@ -267,10 +300,13 @@ def _plot_zonas(zonas_data: list[dict]) -> bytes | None:
 def _embed_image(pdf: FPDF, img_bytes: bytes, w: float = 160, center: bool = False) -> None:
     try:
         buf = io.BytesIO(img_bytes)
+        # FORZAR CONVERSION A RGB: FPDF2 puede ignorar la paleta indexada del PNG
+        img = Image.open(buf).convert("RGB")
+        rgb_buf = io.BytesIO()
+        img.save(rgb_buf, format="PNG")
+        rgb_buf.seek(0)
+        
         x = (pdf.w - w) / 2 if center else pdf.get_x()
-        pdf.image(buf, x=x, w=w)
-    except: pass
-g_bytes)
-        x = (pdf.w - w) / 2 if center else pdf.get_x()
-        pdf.image(buf, x=x, w=w)
-    except: pass
+        pdf.image(rgb_buf, x=x, w=w)
+    except Exception as e:
+        logger.warning(f"No se pudo incrustar imagen: {e}")

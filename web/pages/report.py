@@ -30,27 +30,67 @@ def _fetch_mapa(lote_id: str):
     except: return None
 
 def _calcular_feno(df: pd.DataFrame):
+    """
+    Calcula fenología enfocándose en la CAMPAÑA MÁS RECIENTE.
+    Filtra los últimos 12 meses para evitar solapamiento entre años.
+    """
     try:
         from scipy.ndimage import gaussian_filter1d
         from src.config.settings import FENO_PARAMS
-        series = df["ndvi_auditado"].ffill().fillna(0).values
-        dates = pd.to_datetime(df["time"]).values
+        
+        # Copia y filtro temporal
+        df_f = df.copy()
+        df_f["time"] = pd.to_datetime(df_f["time"])
+        ultima_fecha = df_f["time"].max()
+        # Tomamos solo el último ciclo anual
+        df_f = df_f[df_f["time"] > (ultima_fecha - pd.Timedelta(days=365))]
+        
+        series = df_f["ndvi_auditado"].ffill().fillna(0).values
+        dates = df_f["time"].values
+        
+        if len(series) < 5: return None
+
         smooth = gaussian_filter1d(series, sigma=FENO_PARAMS["sigma"])
-        start_idx = int(np.argmax(smooth > FENO_PARAMS["ndvi_start"]))
+        
+        # Inicio: primer punto del ciclo actual sobre umbral
+        start_mask = smooth > FENO_PARAMS["ndvi_start"]
+        start_idx = int(np.argmax(start_mask)) if np.any(start_mask) else 0
+        
+        # Pico: máximo del ciclo actual
         peak_idx = int(np.nanargmax(smooth))
-        res = {"inicio": dates[start_idx], "pico": dates[peak_idx], "fin": dates[-1]}
+        
+        # Fin: último punto o caída bajo umbral
+        end_idx = len(smooth) - 1
+        after_peak = smooth[peak_idx:]
+        end_mask = after_peak < FENO_PARAMS["ndvi_end"]
+        if np.any(end_mask):
+            end_idx = peak_idx + int(np.argmax(end_mask))
+
+        res = {
+            "inicio": dates[start_idx], 
+            "pico": dates[peak_idx], 
+            "fin": dates[end_idx]
+        }
         res["duracion_dias"] = (pd.to_datetime(res["fin"]) - pd.to_datetime(res["inicio"])).days
+        
+        # Validación agronómica básica
+        if res["duracion_dias"] > 210: # Si dura más de 7 meses, algo está mal filtrado
+             res["duracion_dias"] = "Ajuste requerido"
+             
         return res
-    except: return None
+    except Exception as e:
+        logger.warning(f"Error calculando feno: {e}")
+        return None
 
 def show(lote_id: str = "default"):
-    st.title(f"📋 Informe · {lote_id}")
-    st.caption("Generá un reporte PDF con la auditoría completa del lote.")
+    st.title(f"Informe - {lote_id}")
+    st.caption("Genera un reporte PDF con la auditoria completa del lote.")
 
     with st.form("informe_form"):
-        titulo = st.text_input("Título del Informe", value=f"Informe VigorDAE — {lote_id}")
-        region = st.text_input("Región", value="Córdoba, Argentina")
-        submit = st.form_submit_button("📊 Generar Informe PDF", type="primary")
+        # Sanitizado: No usar guiones largos en el valor por defecto
+        titulo = st.text_input("Titulo del Informe", value=f"Informe VigorDAE - {lote_id}")
+        region = st.text_input("Region", value="Cordoba, Argentina")
+        submit = st.form_submit_button("Generar Informe PDF", type="primary")
 
     if submit:
         with st.spinner("Preparando reporte..."):
@@ -64,12 +104,16 @@ def show(lote_id: str = "default"):
             mapa = _fetch_mapa(lote_id)
             feno = _calcular_feno(df)
 
-            from src.analysis.report_generator import generate_report
-            pdf_bytes = generate_report(lote_id, df, zonas or [], feno, mapa, titulo, region)
+            # Recargar el modulo para evitar caches de Streamlit
+            import importlib
+            import src.analysis.report_generator as rg
+            importlib.reload(rg)
+            
+            pdf_bytes = rg.generate_report(lote_id, df, zonas or [], feno, mapa, titulo, region)
 
-            st.success("✅ Informe generado.")
+            st.success("Informe generado.")
             st.download_button(
-                label="⬇️ Descargar PDF",
+                label="Descargar PDF",
                 data=pdf_bytes,
                 file_name=f"Informe_{lote_id}_{datetime.now().strftime('%Y%m%d')}.pdf",
                 mime="application/pdf",
