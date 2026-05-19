@@ -29,57 +29,51 @@ def _fetch_mapa(lote_id: str):
         return r.content if r.status_code == 200 else None
     except: return None
 
-def _calcular_feno(df: pd.DataFrame):
+def _calcular_fenologia(df: pd.DataFrame) -> dict | None:
     """
-    Calcula fenología enfocándose en la CAMPAÑA MÁS RECIENTE.
-    Filtra los últimos 12 meses para evitar solapamiento entre años.
+    Calcula fenologia enfocandose en la CAMPANA MAS RECIENTE.
+    Garantiza el uso de pd.Timestamp para el calculo de duracion.
     """
     try:
         from scipy.ndimage import gaussian_filter1d
         from src.config.settings import FENO_PARAMS
-        
-        # Copia y filtro temporal
-        df_f = df.copy()
-        df_f["time"] = pd.to_datetime(df_f["time"])
-        ultima_fecha = df_f["time"].max()
-        # Tomamos solo el último ciclo anual
-        df_f = df_f[df_f["time"] > (ultima_fecha - pd.Timedelta(days=365))]
-        
-        series = df_f["ndvi_auditado"].ffill().fillna(0).values
-        dates = df_f["time"].values
-        
-        if len(series) < 5: return None
 
-        smooth = gaussian_filter1d(series, sigma=FENO_PARAMS["sigma"])
-        
-        # Inicio: primer punto del ciclo actual sobre umbral
+        # Filtrar ultimos 12 meses para campana activa
+        df = df.copy()
+        df["time"] = pd.to_datetime(df["time"])
+        cutoff = df["time"].max() - pd.DateOffset(months=12)
+        df = df[df["time"] >= cutoff].reset_index(drop=True)
+
+        if len(df) < 5:
+            return None
+
+        series = df["ndvi_auditado"].ffill().fillna(0).values
+        dates  = df["time"].values
+
+        smooth    = gaussian_filter1d(series, sigma=FENO_PARAMS["sigma"])
         start_mask = smooth > FENO_PARAMS["ndvi_start"]
-        start_idx = int(np.argmax(start_mask)) if np.any(start_mask) else 0
-        
-        # Pico: máximo del ciclo actual
-        peak_idx = int(np.nanargmax(smooth))
-        
-        # Fin: último punto o caída bajo umbral
+        start_idx  = int(np.argmax(start_mask)) if np.any(start_mask) else 0
+        peak_idx   = int(np.nanargmax(smooth))
+
+        # Fin: buscar caida bajo umbral despues del pico
         end_idx = len(smooth) - 1
         after_peak = smooth[peak_idx:]
         end_mask = after_peak < FENO_PARAMS["ndvi_end"]
         if np.any(end_mask):
             end_idx = peak_idx + int(np.argmax(end_mask))
 
-        res = {
-            "inicio": dates[start_idx], 
-            "pico": dates[peak_idx], 
-            "fin": dates[end_idx]
-        }
-        res["duracion_dias"] = (pd.Timestamp(res["fin"]) - pd.Timestamp(res["inicio"])).days
-        
-        # Validación agronómica básica
-        if res["duracion_dias"] > 210: # Si dura más de 7 meses, algo está mal filtrado
-             res["duracion_dias"] = "Ajuste requerido"
-             
-        return res
+        inicio = pd.Timestamp(dates[start_idx])
+        pico   = pd.Timestamp(dates[peak_idx])
+        fin    = pd.Timestamp(dates[end_idx])
+
+        result = {"inicio": inicio, "pico": pico, "fin": fin}
+
+        # Duracion: resta entre pd.Timestamp garantiza .days
+        result["duracion_dias"] = (fin - inicio).days
+
+        return result
     except Exception as e:
-        logger.warning(f"Error calculando feno: {e}")
+        logger.warning(f"No se pudo calcular fenologia: {e}")
         return None
 
 def show(lote_id: str = "default"):
@@ -87,7 +81,6 @@ def show(lote_id: str = "default"):
     st.caption("Genera un reporte PDF con la auditoria completa del lote.")
 
     with st.form("informe_form"):
-        # Sanitizado: No usar guiones largos en el valor por defecto
         titulo = st.text_input("Titulo del Informe", value=f"Informe VigorDAE - {lote_id}")
         region = st.text_input("Region", value="Cordoba, Argentina")
         submit = st.form_submit_button("Generar Informe PDF", type="primary")
@@ -102,14 +95,12 @@ def show(lote_id: str = "default"):
             df = pd.DataFrame(res)
             zonas = _fetch_zonas(lote_id)
             mapa = _fetch_mapa(lote_id)
+            
+            # Llamada corregida al nombre de funcion actual
             feno = _calcular_fenologia(df)
 
-            # Recargar el modulo para evitar caches de Streamlit
-            import importlib
-            import src.analysis.report_generator as rg
-            importlib.reload(rg)
-            
-            pdf_bytes = rg.generate_report(lote_id, df, zonas or [], feno, mapa, titulo, region)
+            from src.analysis.report_generator import generate_report
+            pdf_bytes = generate_report(lote_id, df, zonas or [], feno, mapa, titulo, region)
 
             st.success("Informe generado.")
             st.download_button(
