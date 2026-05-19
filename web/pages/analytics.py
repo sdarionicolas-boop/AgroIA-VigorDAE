@@ -3,27 +3,25 @@ import requests
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
+import os
 
 # ── Configuración ──────────────────────────────────────────────────────────────
-# Dinamismo para Docker: buscar API_URL en entorno, fallback a localhost
-API_URL_ENV = os.getenv("API_URL", "http://localhost:8000")
-API_BASE = f"{API_URL_ENV}/lotes/default"
+_API_ROOT = os.getenv("API_URL", "http://localhost:8000")
 ZONA_COLORES = {"Bajo": "#E07B54", "Medio": "#F2C94C", "Alto": "#27AE60"}
 ZONA_COLORES_MAPA = {-1: [200, 200, 200], 0: [224, 123, 84], 1: [242, 201, 76], 2: [39, 174, 96]}
 
-# st.set_page_config ya se llama en web/app.py, no repetir aquí si rompe.
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 @st.cache_data(ttl=300)
-def fetch(endpoint: str):
-    """Llama a la API y retorna el JSON. Cachea 5 minutos."""
+def fetch(endpoint: str, lote_id: str):
+    """Llama a /lotes/{lote_id}/{endpoint} y retorna el JSON. Cachea 5 minutos."""
+    url = f"{_API_ROOT}/lotes/{lote_id}/{endpoint}"
     try:
-        r = requests.get(f"{API_BASE}/{endpoint}", timeout=15)
+        r = requests.get(url, timeout=15)
         r.raise_for_status()
         return r.json()
     except requests.exceptions.ConnectionError:
-        st.error("No se puede conectar con la API. ¿Está corriendo `uvicorn src.api.main:app`?")
+        st.error("No se puede conectar con la API. ¿Está corriendo uvicorn?")
         return None
     except requests.exceptions.HTTPError as e:
         st.error(f"Error de API ({e.response.status_code}): {e.response.text}")
@@ -43,9 +41,10 @@ def anomaly_shapes(df: pd.DataFrame) -> list:
     return shapes
 
 
-# ── Layout ─────────────────────────────────────────────────────────────────────
-def show():
-    st.title("🌱 AgroIA - VigorDAE · Panel de Análisis")
+def show(lote_id: str = "default") -> None:
+    """Punto de entrada llamado desde app.py con el lote seleccionado."""
+
+    st.title(f"🌱 VigorDAE · {lote_id}")
     st.caption("Monitoreo satelital auditado por IA · Sentinel-2 · Córdoba, Argentina")
 
     tab_resumen, tab_zonas, tab_mapa = st.tabs(["📊 Resumen Global", "🗺️ Zonas de Manejo", "🔲 Mapa de Zonificación"])
@@ -55,7 +54,7 @@ def show():
     # TAB 1 — RESUMEN GLOBAL
     # ══════════════════════════════════════════════════════════════════════════════
     with tab_resumen:
-        data_resumen = fetch("resumen")
+        data_resumen = fetch("resumen", lote_id)
 
         if not data_resumen:
             st.warning("Sin datos de resumen disponibles.")
@@ -79,14 +78,12 @@ def show():
 
             # Gráfico: NDVI crudo vs auditado
             fig = go.Figure()
-
             fig.add_trace(go.Scatter(
                 x=df_res["time"], y=df_res["ndvi_raw"],
                 name="NDVI Crudo", mode="lines+markers",
                 line=dict(color="#AAAAAA", width=1, dash="dot"),
                 marker=dict(size=4),
             ))
-
             fig.add_trace(go.Scatter(
                 x=df_res["time"], y=df_res["ndvi_auditado"],
                 name="NDVI Auditado (DAE)", mode="lines+markers",
@@ -113,36 +110,27 @@ def show():
             )
             st.plotly_chart(fig, use_container_width=True)
 
-            with st.expander("Ver datos crudos"):
-                st.dataframe(df_res, use_container_width=True)
-
 
     # ══════════════════════════════════════════════════════════════════════════════
     # TAB 2 — ZONAS DE MANEJO
     # ══════════════════════════════════════════════════════════════════════════════
     with tab_zonas:
-        data_zonas = fetch("zonas")
+        data_zonas = fetch("zonas", lote_id)
 
         if not data_zonas:
             st.warning("Sin datos de zonas disponibles.")
         else:
-            # KPIs de distribución de zonas
             cols = st.columns(len(data_zonas))
             for i, zona in enumerate(data_zonas):
-                cols[i].metric(
-                    f"Zona {zona['nombre']}",
-                    f"{zona['pct_pixeles']}% del lote" if zona["pct_pixeles"] else "—"
-                )
+                cols[i].metric(f"Zona {zona['nombre']}", f"{zona['pct_pixeles']}% del lote")
 
             st.divider()
 
-            # Gráfico comparativo multi-zona
             fig = go.Figure()
             for zona in data_zonas:
                 df_z = pd.DataFrame(zona["data"])
                 df_z["time"] = pd.to_datetime(df_z["time"])
                 color = ZONA_COLORES.get(zona["nombre"], "#888888")
-
                 fig.add_trace(go.Scatter(
                     x=df_z["time"], y=df_z["ndvi"],
                     name=f"Zona {zona['nombre']}",
@@ -160,76 +148,32 @@ def show():
             )
             st.plotly_chart(fig, use_container_width=True)
 
-            # Subplots individuales por zona
-            st.subheader("Detalle por zona")
-            for zona in data_zonas:
-                df_z = pd.DataFrame(zona["data"])
-                df_z["time"] = pd.to_datetime(df_z["time"])
-                color = ZONA_COLORES.get(zona["nombre"], "#888888")
-
-                with st.expander(f"Zona {zona['nombre']} — {zona['pct_pixeles']}% del lote"):
-                    fig_z = go.Figure()
-                    fig_z.add_trace(go.Scatter(
-                        x=df_z["time"], y=df_z["ndvi"],
-                        mode="lines+markers",
-                        line=dict(color=color, width=2),
-                        marker=dict(size=5),
-                        name="NDVI Auditado",
-                    ))
-                    anom = df_z[df_z["anomalia"] == True]
-                    if not anom.empty:
-                        fig_z.add_trace(go.Scatter(
-                            x=anom["time"], y=anom["ndvi"],
-                            mode="markers",
-                            marker=dict(color="#E74C3C", size=9, symbol="x"),
-                            name="Anomalía Corregida",
-                        ))
-                    fig_z.update_layout(
-                        height=300, margin=dict(l=30, r=10, t=20, b=30),
-                        yaxis=dict(range=[-0.1, 1.0]),
-                        showlegend=True,
-                    )
-                    st.plotly_chart(fig_z, use_container_width=True)
-                    st.dataframe(df_z, use_container_width=True, hide_index=True)
-
 
     # ══════════════════════════════════════════════════════════════════════════════
     # TAB 3 — MAPA DE ZONIFICACIÓN
     # ══════════════════════════════════════════════════════════════════════════════
-        with tab_mapa:
-            with st.spinner("Cargando metadata y render de mapa..."):
-                meta = fetch("mapa/meta")
-                # La imagen se carga por URL directa para que el navegador la cachee y no pase por JSON
-                mapa_url = f"{API_URL_ENV}/lotes/default/mapa/render"
+    with tab_mapa:
+        with st.spinner("Cargando render de mapa..."):
+            meta = fetch("mapa/meta", lote_id)
+            mapa_url = f"{_API_ROOT}/lotes/{lote_id}/mapa/render"
 
-            if not meta:
-                st.warning("Información de mapa no disponible.")
-            else:
-                dims = meta["dimensions"]
-                col_info, col_mapa = st.columns([1, 3])
+        if not meta:
+            st.warning("Información de mapa no disponible.")
+        else:
+            dims = meta["dimensions"]
+            col_info, col_mapa = st.columns([1, 3])
 
-                with col_info:
-                    st.subheader("Información del Lote")
-                    st.write(f"**Sistema:** `{meta['crs']}`")
-                    st.write(f"**Resolución:** {dims['y']} × {dims['x']} píxeles")
-                    if meta.get("bbox"):
-                        st.write(f"**Límites (BBox):**")
-                        st.code(f"{[round(v, 2) for v in meta['bbox']]}")
+            with col_info:
+                st.subheader("Información del Lote")
+                st.write(f"**Sistema:** `{meta['crs']}`")
+                st.write(f"**Resolución:** {dims['y']} × {dims['x']} píxeles")
+                st.divider()
+                st.markdown("**Leyenda Operativa**")
+                st.write("🟢 **Zona Alto Vigor**")
+                st.write("🟡 **Zona Vigor Medio**")
+                st.write("🟠 **Zona Bajo Vigor**")
+                st.write("⬜ **Fuera de Lote / Ruido**")
 
-                    st.divider()
-                    st.markdown("**Leyenda Operativa**")
-                    st.write("🟢 **Zona Alto Vigor**")
-                    st.write("🟡 **Zona Vigor Medio**")
-                    st.write("🟠 **Zona Bajo Vigor**")
-                    st.write("⬜ **Fuera de Lote / Ruido**")
-
-                with col_mapa:
-                    # Usamos st.image directamente con la URL de la API. 
-                    # El parámetro use_container_width=True asegura que se vea bien.
-                    st.image(mapa_url, caption="Mapa de Zonificación de Precisión (Renderizado en Servidor)", use_container_width=True)
-
-                    st.caption(
-                        "Este mapa es servido como PNG optimizado con paleta indexada desde el motor de AgroIA."
-                    )
-if __name__ == "__main__":
-    show()
+            with col_mapa:
+                st.image(mapa_url, caption="Mapa de Zonificación de Precisión (PNG Optimizado)", use_container_width=True)
+                st.caption("Renderizado en servidor con paleta indexada de AgroIA.")
