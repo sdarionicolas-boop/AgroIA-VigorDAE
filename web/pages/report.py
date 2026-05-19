@@ -33,7 +33,7 @@ def _calcular_feno(df: pd.DataFrame):
     try:
         from scipy.ndimage import gaussian_filter1d
         from src.config.settings import FENO_PARAMS
-        series = df["ndvi_auditado"].fillna(method="ffill").fillna(0).values
+        series = df["ndvi_auditado"].ffill().fillna(0).values
         dates = pd.to_datetime(df["time"]).values
         smooth = gaussian_filter1d(series, sigma=FENO_PARAMS["sigma"])
         start_idx = int(np.argmax(smooth > FENO_PARAMS["ndvi_start"]))
