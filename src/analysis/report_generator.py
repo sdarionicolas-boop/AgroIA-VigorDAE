@@ -48,7 +48,7 @@ class VigorDAEReport(FPDF):
         self.set_font("Helvetica", "", 8)
         self.set_text_color(*COLOR_GRIS)
         # STRICT ASCII ONLY
-        footer_text = f"Lote: {self.lote_id} | Pagina {self.page_no()} | Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+        footer_text = f"Lote: {self.lote_id} | Pagina {self.page_no()} | Desarrollado con datos de campo en Argentina. Compatible con cualquier cultivo."
         self.cell(0, 5, footer_text, align="C")
 
     # ###########################################################################
@@ -110,7 +110,8 @@ def generate_report(
     fenologia: dict | None,
     mapa_png_bytes: bytes | None,
     titulo: str = "Informe de Campana",
-    region: str = "Cordoba, Argentina",
+    region: str = "Argentina",
+    cultivo: str = "No especificado",
 ) -> bytes:
     """
     Genera el PDF completo y retorna los bytes para descarga.
@@ -125,6 +126,7 @@ def generate_report(
     titulo_clean = str(titulo).encode('ascii', 'ignore').decode('ascii')
     region_clean = str(region).encode('ascii', 'ignore').decode('ascii')
     lote_clean = str(lote_id).encode('ascii', 'ignore').decode('ascii')
+    cultivo_clean = str(cultivo).encode('ascii', 'ignore').decode('ascii')
 
     pdf.set_font("Helvetica", "B", 18)
     pdf.set_text_color(*COLOR_NEGRO)
@@ -132,6 +134,7 @@ def generate_report(
     pdf.set_font("Helvetica", "", 11)
     pdf.set_text_color(*COLOR_GRIS)
     pdf.cell(0, 6, f"Lote: {lote_clean} - {region_clean}", ln=True, align="C")
+    pdf.cell(0, 6, f"Cultivo: {cultivo_clean}", ln=True, align="C")
     pdf.cell(0, 6, f"Fecha de generacion: {datetime.now().strftime('%d/%m/%Y')}", ln=True, align="C")
     pdf.ln(6)
 
@@ -189,6 +192,13 @@ def generate_report(
         if chart_zonas:
             _embed_image(pdf, chart_zonas, w=170)
         pdf.ln(4)
+    else:
+        pdf.set_font("Helvetica", "I", 10)
+        pdf.set_text_color(*COLOR_GRIS)
+        pdf.cell(0, 10, "Zonificacion espacial no disponible para cargas manuales de CSV.", ln=True)
+        pdf.set_font("Helvetica", "", 9)
+        pdf.multi_cell(0, 5, "Para habilitar la zonificacion por vigor, se requiere el procesamiento del lote mediante imagenes Sentinel-2 (Pipeline Satelital completo).", align="L")
+        pdf.ln(4)
 
     # ###########################################################################
     # 5. Mapa de zonificacion
@@ -225,13 +235,18 @@ def generate_report(
     pdf.ln(6)
     pdf.set_font("Helvetica", "I", 8)
     pdf.set_text_color(*COLOR_GRIS)
-    pdf.multi_cell(
-        0, 5,
-        "Este informe fue generado automaticamente por AgroIA - VigorDAE. "
-        "Los datos de NDVI han sido auditados por el Agente Verificador (LSTM Autoencoder) "
-        "para garantizar la integridad ecofisiologica. La zonificacion fue realizada mediante K-Means.",
-        align="J"
-    )
+
+    nota_final = "Este informe fue generado automaticamente por AgroIA - VigorDAE. "
+    if zonas_data:
+        nota_final += (
+            "Los datos de NDVI han sido auditados por el Agente Verificador (LSTM Autoencoder) "
+            "para garantizar la integridad ecofisiologica. La zonificacion fue realizada mediante K-Means jerarquico."
+        )
+    else:
+        nota_final += "Los datos fueron auditados por el Agente Verificador (LSTM Autoencoder) para garantizar su integridad."
+
+    pdf.multi_cell(0, 5, nota_final, align="J")
+
 
     return bytes(pdf.output())
 

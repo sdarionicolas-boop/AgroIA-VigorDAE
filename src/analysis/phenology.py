@@ -15,40 +15,64 @@ class PhenologyAnalyzer:
     def __init__(self, params=FENO_PARAMS):
         self.params = params
 
-    def analyze_season(self, series_ndvi, dates):
+    def analyze_season(self, series_ndvi, dates, filtrar_ultimo_anio: bool = True):
         """
         Calcula inicio, pico y fin de campaña.
         """
-        if len(series_ndvi) < 10 or np.all(np.isnan(series_ndvi)):
-            return None
-
         try:
-            # Suavizado para estabilidad
-            ndvi_smooth = gaussian_filter1d(series_ndvi, sigma=self.params["sigma"])
+            df_f = pd.DataFrame({"time": pd.to_datetime(dates), "ndvi": series_ndvi})
             
-            # Inicio: primer punto que supera el umbral
-            start_mask = ndvi_smooth > self.params["ndvi_start"]
-            start_idx = np.argmax(start_mask) if np.any(start_mask) else None
+            if filtrar_ultimo_anio:
+                cutoff = df_f["time"].max() - pd.DateOffset(months=12)
+                df_f = df_f[df_f["time"] >= cutoff].reset_index(drop=True)
             
-            # Pico: máximo absoluto
-            peak_idx = int(np.nanargmax(ndvi_smooth)) if not np.all(np.isnan(ndvi_smooth)) else None
-            
-            # Fin: primer punto después del pico que cae bajo el umbral
-            end_idx = None
-            if peak_idx is not None and peak_idx < len(ndvi_smooth) - 1:
-                end_mask = ndvi_smooth[peak_idx:] < self.params["ndvi_end"]
-                end_idx = peak_idx + np.argmax(end_mask) if np.any(end_mask) else len(ndvi_smooth) - 1
+            if len(df_f) < 5:
+                return None
 
+            series = df_f["ndvi"].ffill().fillna(0).values
+            dates_arr = df_f["time"].values
+            
+            # Suavizado para estabilidad
+            smooth = gaussian_filter1d(series, sigma=self.params["sigma"])
+            
+            # Pico: máximo absoluto en el rango filtrado
+            peak_idx = int(np.nanargmax(smooth))
+            peak_value = smooth[peak_idx]
+            peak_date = pd.Timestamp(dates_arr[peak_idx])
+            
+            # Inicio: primer punto que supera el umbral antes del pico
+            pre_peak = smooth[:peak_idx] if peak_idx > 0 else smooth
+            start_mask = pre_peak > self.params["ndvi_start"]
+            start_idx = int(np.argmax(start_mask)) if np.any(start_mask) else 0
+            
+            # Fin: primer punto después del pico que cae bajo el umbral dinámico
+            # Limitado a 548 días post-pico (1.5 años)
+            max_end_date = peak_date + pd.DateOffset(days=548)
+            post_peak_indices = np.where(pd.to_datetime(dates_arr) >= peak_date)[0]
+            dates_post = pd.to_datetime(dates_arr[post_peak_indices])
+            valid_post_mask = dates_post <= max_end_date
+            
+            smooth_post = smooth[post_peak_indices][valid_post_mask]
+            
+            # Umbral de fin dinámico (50% del pico o el mínimo de inicio)
+            end_threshold = max(peak_value * 0.5, self.params["ndvi_start"])
+            end_mask = smooth_post < end_threshold
+            
             results = {
-                'inicio': dates[start_idx] if start_idx is not None else None,
-                'pico': dates[peak_idx] if peak_idx is not None else None,
-                'fin': dates[end_idx] if end_idx is not None else None
+                "inicio": pd.Timestamp(dates_arr[start_idx]),
+                "pico": peak_date,
+                "fin": None,
+                "duracion_dias": None
             }
             
-            if results['inicio'] and results['fin']:
-                results['duracion_dias'] = (pd.to_datetime(results['fin']) - pd.to_datetime(results['inicio'])).days
+            if np.any(end_mask):
+                local_end_idx = int(np.argmax(end_mask))
+                end_idx = post_peak_indices[0] + local_end_idx
+                results["fin"] = pd.Timestamp(dates_arr[end_idx])
+                results["duracion_dias"] = (results["fin"] - results["inicio"]).days
             
             return results
         except Exception as e:
-            logger.error(f"Error en análisis fenológico: {e}")
+            logger.error(f"Error en analisis fenologico: {e}")
             return None
+
